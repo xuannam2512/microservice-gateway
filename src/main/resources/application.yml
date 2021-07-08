@@ -1,0 +1,79 @@
+server:
+  port: 8080
+
+#security:
+#  oauth2:
+#    resource:
+#      jwt:
+#        key-uri: http://localhost:9000/oauth/token_key
+#    client:
+#      client-id: talk2amareswaran
+#      client-secret: talk2amareswaran@123
+
+spring:
+#  main:
+#    web-application-type: reactive
+#    allow-bean-definition-overriding: true
+  application:
+    name: gateway
+  cloud:
+    consul:
+      discovery:
+        healthCheckPath: /actuator/health
+        health-check-interval: 10s
+        health-check-critical-timeout: 20s
+        instanceId: ${spring.application.name}:${spring.application.instance-id:${random.value}}
+        service-name: gateway
+        #        prefer-ip-address: true
+        prefer-ip-address: false
+        tags:
+          - profile=${spring.profiles.active}
+          - version=#project.version#
+          - git-version=${git.commit.id.describe:}
+          - git-commit=${git.commit.id.abbrev:}
+          - git-branch=${git.branch:}
+      config:
+        fail-fast: false # if not in "prod" profile, do not force to use Spring Cloud Config
+        format: yaml
+        profile-separator: '-'
+        watch:
+          enabled: false
+        enabled: false
+    gateway:
+      #      default-filters:
+      #        - JWTRelay
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+          predicates:
+            - name: Path
+              args:
+                pattern: "'/api/'+serviceId.toLowerCase()+'/**'"
+          filters:
+            - name: RewritePath
+              args:
+                regexp: "'/api/' + serviceId.toLowerCase() + '/(?<remaining>.*)'"
+                replacement: "'/${remaining}'"
+            - name: Authentication
+              args:
+                preLogger: true
+                postLogger: true
+                clientId: "'talk2amareswaran'"
+                clientSecret: "'talk2amareswaran@123'"
+                url: "'http://localhost:9000/auth/token_new'"
+      httpclient:
+        pool:
+          max-connections: 1000
+      routes:
+        - id: service_oauth
+          uri: http://localhost:9000
+          predicates:
+            - Path=/api/oauth/**
+          filters:
+            - RewritePath=/api/oauth(?<segment>/?.*), $\{segment}
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    reactor.netty.http.client: DEBUG
